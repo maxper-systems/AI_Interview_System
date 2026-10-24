@@ -270,9 +270,9 @@
       <h2>Candidate Login</h2>
       <p class="subtitle">Please authenticate to begin your interactive voice assessment.</p>
 
-
-
-      <div class="form-group">
+      <div class="alert alert-info" id="authNotice" style="display: none; text-align: left; margin-bottom: 16px;">
+        🔑 Verifying your invitation link credentials... Please wait.
+      </div>
         <label>Email Address</label>
         <input type="email" id="authEmail" placeholder="candidate@example.com">
       </div>
@@ -399,6 +399,9 @@
     let photoDataUrl = "";
     let photoFileId = "";
     let transcriptEvents = [];
+    // Concurrency & single-execution guards to prevent race condition popups
+    let isAuthInProgress = false;
+    let isConfigLoaded = false;
     // Interview snapshot schedule: start → mid-interview → end (not when the page opens)
     let interviewSnapshots = [];      // [{ phase, fileId, time }]
     let pendingSnapshotUploads = [];
@@ -452,7 +455,17 @@
       }
 
       const urlToken = urlParams.get("token");
-      if (urlToken) autoAuth(urlToken);
+      if (urlToken) {
+        // Lock UI immediately so user doesn't submit a duplicate concurrent login
+        const btn = document.getElementById("btnAuth");
+        const notice = document.getElementById("authNotice");
+        if (btn) {
+          btn.disabled = true;
+          btn.textContent = "🔄 Verifying Invitation Token...";
+        }
+        if (notice) notice.style.display = "block";
+        autoAuth(urlToken);
+      }
     });
 
     function getBackendUrl() {
@@ -461,12 +474,15 @@
     }
 
     async function submitAuth() {
+      if (isAuthInProgress || isConfigLoaded) return;
+
       const email = document.getElementById("authEmail").value.trim();
       const password = document.getElementById("authPassword").value.trim();
       if (!email || !password) {
         return alert("Please enter both your email address and access password.");
       }
 
+      isAuthInProgress = true;
       const btn = document.getElementById("btnAuth");
       btn.disabled = true;
       btn.textContent = "Verifying...";
@@ -477,11 +493,13 @@
           candidateData = res.candidate;
           await loadConfig();
         } else {
+          isAuthInProgress = false;
           alert("Authentication Failed: " + res.message);
           btn.disabled = false;
           btn.textContent = "Verify Credentials & Proceed →";
         }
       } catch (e) {
+        isAuthInProgress = false;
         alert("Error: " + e.message);
         btn.disabled = false;
         btn.textContent = "Verify Credentials & Proceed →";
@@ -489,22 +507,47 @@
     }
 
     async function autoAuth(token) {
+      if (isConfigLoaded) return;
+      isAuthInProgress = true;
       try {
         const res = await callBackendApi({ action: "authenticate", token: token });
         if (res.success) {
           candidateData = res.candidate;
           document.getElementById("authEmail").value = candidateData.email;
           await loadConfig();
+        } else {
+          // If token expired or invalid, fall back to manual login form
+          isAuthInProgress = false;
+          const btn = document.getElementById("btnAuth");
+          const notice = document.getElementById("authNotice");
+          if (btn) {
+            btn.disabled = false;
+            btn.textContent = "Verify Credentials & Proceed →";
+          }
+          if (notice) {
+            notice.className = "alert alert-danger";
+            notice.textContent = "Token authentication note: " + (res.message || "Please enter your password manually.");
+          }
         }
       } catch (e) {
         console.warn("Auto-auth failed:", e);
+        isAuthInProgress = false;
+        const btn = document.getElementById("btnAuth");
+        if (btn) {
+          btn.disabled = false;
+          btn.textContent = "Verify Credentials & Proceed →";
+        }
       }
     }
 
     async function loadConfig() {
+      if (isConfigLoaded) return; // Guard: Never fetch or alert twice
+      isAuthInProgress = true;
       try {
         const res = await callBackendApi({ action: "getInterviewConfig", token: candidateData.token || candidateData.id });
         if (res.success) {
+          isConfigLoaded = true;
+          isAuthInProgress = false;
           realtimeConfig = res.realtimeConfig;
           currentInterviewerName = realtimeConfig.interviewerName || "Victoria";
           const title = realtimeConfig.interviewerTitle || "Senior Talent Assessment Director";
@@ -516,10 +559,15 @@
           if (noticeEl) noticeEl.textContent = `${currentInterviewerName} will conduct your interview via real-time voice. Speak clearly after each question.`;
           await transitionToHardware();
         } else {
+          isAuthInProgress = false;
           alert("Failed to load interview config: " + res.message);
         }
       } catch (err) {
-        alert("Error loading config: " + err.message);
+        isAuthInProgress = false;
+        // Only alert if interview is not already active
+        if (!isConfigLoaded) {
+          alert("Error loading config: " + err.message);
+        }
       }
     }
 
