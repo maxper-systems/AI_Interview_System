@@ -399,6 +399,12 @@
     let photoDataUrl = "";
     let photoFileId = "";
     let transcriptEvents = [];
+    // Interview snapshot schedule: start → mid-interview → end (not when the page opens)
+    let interviewSnapshots = [];      // [{ phase, fileId, time }]
+    let pendingSnapshotUploads = [];
+    let snapshotPhasesTaken = {};
+    let completedAiTurns = 0;
+    let sessionTokenUsage = { input: 0, cached: 0, output: 0 };
     let interviewStartTime = null;
     const DEFAULT_BACKEND_URL = "https://script.google.com/macros/s/AKfycbxFnpaCYl5RcL1c87DMX_XiIetUEkV_UMFlKel3WXFMPvJc_VNc3mEgRtfYvcKFKlF0-g/exec";
     let timerInterval = null;
@@ -538,7 +544,7 @@
         // Start mic volume meter
         startMicLevelVisualizer(localStream);
 
-        setTimeout(snapVerificationPhoto, 1200);
+        // Verification snapshots are taken once the interview actually starts (see beginInterviewSession)
       } catch (err) {
         alert("Camera / Microphone permission denied: " + err.message);
       }
@@ -571,10 +577,14 @@
       }
     }
 
-    function snapVerificationPhoto() {
-      const video = document.getElementById("webcamVideo");
+    function captureCameraFrame() {
       const canvas = document.getElementById("photoCanvas");
-      if (!video || !video.videoWidth) return;
+      if (!canvas || (localStream && !localStream.active)) return "";
+      // Prefer the visible in-interview camera feed; fall back to the hardware-check preview
+      const pip = document.getElementById("candidateVideoPip");
+      const preview = document.getElementById("webcamVideo");
+      const video = (pip && pip.videoWidth) ? pip : preview;
+      if (!video || !video.videoWidth) return "";
 
       const ctx = canvas.getContext("2d");
       ctx.save();
@@ -583,18 +593,74 @@
       ctx.drawImage(video, 0, 0, canvas.width, canvas.height);
       ctx.restore();
 
-      photoDataUrl = canvas.toDataURL("image/jpeg", 0.85);
+      return canvas.toDataURL("image/jpeg", 0.85);
+    }
 
-      callBackendApi({
+    // phase: "start" | "mid" | "end" (automatic, once each) or "precheck" (manual button)
+    // Returns true when a frame was captured and its upload started.
+    function snapVerificationPhoto(phase) {
+      phase = (typeof phase === "string" && phase) ? phase : "precheck";
+      if (!candidateData) return false;
+      if (phase !== "precheck" && snapshotPhasesTaken[phase]) return false;
+
+      const dataUrl = captureCameraFrame();
+      if (!dataUrl) return false;
+      snapshotPhasesTaken[phase] = true;
+      photoDataUrl = dataUrl;
+      const takenAt = new Date().toLocaleTimeString();
+
+      const upload = callBackendApi({
         action: "savePhoto",
         candidateId: candidateData.id,
         email: candidateData.email,
-        imageDataBase64: photoDataUrl
+        imageDataBase64: dataUrl,
+        phase: phase
       }).then(r => {
-        if (r && r.success) photoFileId = r.fileId;
+        if (r && r.success) {
+          interviewSnapshots = interviewSnapshots.filter(s => s.phase !== phase);
+          interviewSnapshots.push({ phase: phase, fileId: r.fileId, time: takenAt });
+          console.log(`Candidate ${phase} snapshot stored in Drive. File ID:`, r.fileId);
+        }
       }).catch(err => {
         console.warn("Photo upload notice:", err.message);
       });
+      pendingSnapshotUploads.push(upload);
+      return true;
+    }
+
+    // Retries briefly until the camera feed has a frame available
+    function scheduleSnapshot(phase, delayMs, attemptsLeft) {
+      setTimeout(() => {
+        if (snapshotPhasesTaken[phase]) return;
+        if (!snapVerificationPhoto(phase) && attemptsLeft > 0) {
+          scheduleSnapshot(phase, 1000, attemptsLeft - 1);
+        }
+      }, delayMs);
+    }
+
+    // Called on every completed AI turn. Turn 1 = greeting + Q1, turn k+1 = question k+1.
+    // e.g. 10 questions → mid snapshot after 5 answers, when the AI asks question 6.
+    function registerCompletedAiTurn(response) {
+      if (response && response.status && response.status !== "completed") return; // ignore cancelled/interrupted turns
+      completedAiTurns++;
+      const totalQuestions = (candidateData && candidateData.questions) ? candidateData.questions.length : 0;
+      if (totalQuestions >= 2 && completedAiTurns >= Math.floor(totalQuestions / 2) + 1) {
+        snapVerificationPhoto("mid");
+      }
+    }
+
+    // Logs per-turn and cumulative token usage, including context-cache hits reported by the API
+    function logTokenUsage(usage) {
+      if (!usage) return;
+      const inDetails = usage.input_tokens_details || usage.input_token_details || usage.prompt_tokens_details || {};
+      const input = Number(usage.input_tokens || usage.prompt_tokens || 0);
+      const cached = Number(inDetails.cached_tokens || usage.cached_tokens || 0);
+      const output = Number(usage.output_tokens || usage.completion_tokens || 0);
+      sessionTokenUsage.input += input;
+      sessionTokenUsage.cached += cached;
+      sessionTokenUsage.output += output;
+      const hitRate = sessionTokenUsage.input ? Math.round((sessionTokenUsage.cached / sessionTokenUsage.input) * 100) : 0;
+      console.log(`[Token Usage] turn: input=${input} (cached=${cached}), output=${output} | session: input=${sessionTokenUsage.input}, cached=${sessionTokenUsage.cached} (${hitRate}% cache hit), output=${sessionTokenUsage.output}`);
     }
 
     async function beginInterviewSession() {
@@ -617,6 +683,8 @@
       document.getElementById("roleTitle").textContent = `${candidateData.role} Voice Interview`;
 
       startTimer();
+      // Interview-start verification snapshot (short delay so the candidate is seated and the feed is live)
+      scheduleSnapshot("start", 3000, 5);
       connectWebSocket();
     }
 
@@ -819,6 +887,10 @@
               }
             } catch(e){}
             finalizeAiStream();
+            try {
+              logTokenUsage(evt.response && evt.response.usage);
+              registerCompletedAiTurn(evt.response);
+            } catch (e) {}
           }
 
           // 8. Server error notices
@@ -1017,6 +1089,8 @@
 
     async function concludeInterview(confirmPrompt) {
       if (confirmPrompt && !confirm("Conclude interview session?")) return;
+      // Final identity snapshot while the camera is still live
+      snapVerificationPhoto("end");
       if (timerInterval) clearInterval(timerInterval);
       stopAllAudioPlayback();
       if (ws) ws.close();
@@ -1054,12 +1128,20 @@
 
       const totalSec = Math.floor((Date.now() - (interviewStartTime || Date.now())) / 1000);
       try {
+        // Make sure start / mid / end snapshot uploads have finished so they are embedded in the report
+        await Promise.all(pendingSnapshotUploads);
+        const primarySnap = ["start", "precheck", "mid", "end"]
+          .map(p => interviewSnapshots.find(s => s.phase === p))
+          .find(Boolean);
+        if (primarySnap) photoFileId = primarySnap.fileId;
+
         const res = await callBackendApi({
           action: "saveTranscriptDoc",
           candidateId: candidateData.id,
           email: candidateData.email,
           transcriptList: transcriptEvents,
           photoFileId: photoFileId,
+          photoSnapshots: interviewSnapshots,
           durationSeconds: totalSec
         });
 
