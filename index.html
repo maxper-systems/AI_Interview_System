@@ -270,11 +270,7 @@
       <h2>Candidate Login</h2>
       <p class="subtitle">Please authenticate to begin your interactive voice assessment.</p>
 
-      <div class="form-group">
-        <label>Copy and paste your shared URL from email in this box</label>
-        <input type="text" id="backendUrl" placeholder="https://...">
-        <small style="color:var(--text-muted); font-size:0.78rem;">Paste the interview portal address provided in your invitation email.</small>
-      </div>
+
 
       <div class="form-group">
         <label>Email Address</label>
@@ -404,7 +400,7 @@
     let photoFileId = "";
     let transcriptEvents = [];
     let interviewStartTime = null;
-    const DEFAULT_BACKEND_URL = "";
+    const DEFAULT_BACKEND_URL = "https://script.google.com/macros/s/AKfycbxFnpaCYl5RcL1c87DMX_XiIetUEkV_UMFlKel3WXFMPvJc_VNc3mEgRtfYvcKFKlF0-g/exec";
     let timerInterval = null;
     let currentInterviewerName = "Victoria";
     let currentAvatarMode = "photo";
@@ -440,21 +436,10 @@
       if (btn) btn.style.display = "none";
     }
 
-    // Initialize URL and Auth
+
+
     window.addEventListener("DOMContentLoaded", () => {
-      // Clear any legacy cached URLs from browser storage so the box always starts completely empty
-      try {
-        localStorage.removeItem("gas_backend_url");
-      } catch (e) {}
-
       const urlParams = new URLSearchParams(window.location.search);
-      const urlBackend = urlParams.get("backend") || urlParams.get("url");
-      if (urlBackend) {
-        document.getElementById("backendUrl").value = urlBackend;
-      } else {
-        document.getElementById("backendUrl").value = "";
-      }
-
       const urlEmail = urlParams.get("email");
       if (urlEmail) {
         document.getElementById("authEmail").value = urlEmail;
@@ -465,14 +450,11 @@
     });
 
     function getBackendUrl() {
-      return (document.getElementById("backendUrl").value || "").trim();
+      const urlParams = new URLSearchParams(window.location.search);
+      return (urlParams.get("backend") || urlParams.get("url") || DEFAULT_BACKEND_URL).trim();
     }
 
     async function submitAuth() {
-      const backendUrl = getBackendUrl();
-      if (!backendUrl) {
-        return alert("Please copy and paste your shared URL from email in the box.");
-      }
       const email = document.getElementById("authEmail").value.trim();
       const password = document.getElementById("authPassword").value.trim();
       if (!email || !password) {
@@ -691,8 +673,8 @@
               input_audio_transcription: { model: "qwen3-asr-flash-realtime" },
               turn_detection: {
                 type: "server_vad",
-                threshold: 0.6,
-                silence_duration_ms: 1800,
+                threshold: 0.65,
+                silence_duration_ms: 2500,
                 prefix_padding_ms: 300
               },
               instructions: instructions
@@ -870,6 +852,7 @@
     // =========================================================================
     let scheduledAudioSources = [];
     let isAiSpeaking = false;
+    let aiSpeakingMuteUntil = 0;
 
     function stopAllAudioPlayback() {
       for (const src of scheduledAudioSources) {
@@ -883,6 +866,7 @@
         playbackTime = playbackAudioCtx.currentTime;
       }
       isAiSpeaking = false;
+      aiSpeakingMuteUntil = Date.now() + 600;
       document.getElementById("avatarHalo").classList.remove("speaking");
     }
 
@@ -893,20 +877,14 @@
 
       audioProcessor.onaudioprocess = (e) => {
         if (!ws || ws.readyState !== WebSocket.OPEN) return;
-        const input = e.inputBuffer.getChannelData(0);
 
-        // Acoustic Echo Suppression: When Tina is actively speaking through laptop speakers,
-        // ignore speaker sound leakage so Tina does not interrupt herself and say "I am listening"
-        if (isAiSpeaking) {
-          let sumSquares = 0;
-          for (let i = 0; i < input.length; i++) sumSquares += input[i] * input[i];
-          const rms = Math.sqrt(sumSquares / input.length);
-          if (rms < 0.14) {
-            // Background speaker sound below interrupt threshold; skip streaming
-            return;
-          }
+        // Acoustic Echo Suppression & Reverberation Hangover:
+        // When AI is speaking or audio is still echoing in the room, mute mic streaming so AI never echoes itself
+        if (isAiSpeaking || Date.now() < aiSpeakingMuteUntil) {
+          return;
         }
 
+        const input = e.inputBuffer.getChannelData(0);
         const pcm16 = new Int16Array(input.length);
         for (let i = 0; i < input.length; i++) {
           const s = Math.max(-1, Math.min(1, input[i]));
@@ -960,6 +938,7 @@
         if (idx > -1) scheduledAudioSources.splice(idx, 1);
         if (scheduledAudioSources.length === 0) {
           isAiSpeaking = false;
+          aiSpeakingMuteUntil = Date.now() + 600;
           document.getElementById("avatarHalo").classList.remove("speaking");
         }
       };
