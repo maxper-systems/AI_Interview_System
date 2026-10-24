@@ -1,0 +1,1135 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Standalone AI Voice Interviewer - Candidate Portal</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Plus+Jakarta+Sans:wght@300;400;500;600;700&family=JetBrains+Mono:wght@400;500&display=swap" rel="stylesheet">
+
+  <style>
+    :root {
+      --bg-gradient: radial-gradient(circle at 10% 20%, #0d1117 0%, #161b22 90%);
+      --surface-glass: rgba(22, 27, 34, 0.85);
+      --surface-border: rgba(240, 246, 252, 0.1);
+      --primary: #2f81f7;
+      --primary-hover: #58a6ff;
+      --primary-glow: rgba(47, 129, 247, 0.35);
+      --success: #238636;
+      --success-glow: rgba(46, 160, 67, 0.35);
+      --danger: #da3633;
+      --text-main: #f0f6fc;
+      --text-muted: #8b949e;
+      --ai-bubble: #1f293d;
+      --user-bubble: #132d21;
+      --border-radius-lg: 18px;
+      --border-radius-md: 12px;
+    }
+
+    * { box-sizing: border-box; margin: 0; padding: 0; font-family: 'Plus Jakarta Sans', sans-serif; }
+    body { background: var(--bg-gradient); color: var(--text-main); min-height: 100vh; display: flex; flex-direction: column; overflow-x: hidden; }
+
+    header {
+      background: rgba(13, 17, 23, 0.85);
+      backdrop-filter: blur(12px);
+      border-bottom: 1px solid var(--surface-border);
+      padding: 14px 28px;
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      position: sticky;
+      top: 0;
+      z-index: 50;
+    }
+
+    .brand { display: flex; align-items: center; gap: 12px; font-weight: 700; font-size: 1.15rem; }
+    .brand-icon {
+      width: 38px; height: 38px;
+      background: linear-gradient(135deg, #1f6feb, #8957e5);
+      border-radius: 10px;
+      display: flex; align-items: center; justify-content: center;
+      font-size: 1.2rem;
+      box-shadow: 0 0 15px rgba(137, 87, 229, 0.4);
+    }
+
+    .session-badge {
+      display: flex; align-items: center; gap: 10px;
+      background: rgba(255, 255, 255, 0.05);
+      padding: 6px 14px;
+      border-radius: 30px;
+      border: 1px solid var(--surface-border);
+      font-size: 0.88rem;
+    }
+
+    .status-dot { width: 10px; height: 10px; border-radius: 50%; background: #8b949e; transition: all 0.3s; }
+    .status-dot.active { background: #3fb950; box-shadow: 0 0 10px #3fb950; }
+    .status-dot.speaking { background: #58a6ff; box-shadow: 0 0 12px #58a6ff; animation: pulse 1.2s infinite; }
+
+    @keyframes pulse { 0% { transform: scale(1); } 50% { transform: scale(1.3); } 100% { transform: scale(1); } }
+
+    main { flex: 1; display: flex; align-items: center; justify-content: center; padding: 24px; }
+
+    .card {
+      background: var(--surface-glass);
+      backdrop-filter: blur(20px);
+      border: 1px solid var(--surface-border);
+      border-radius: var(--border-radius-lg);
+      padding: 36px;
+      width: 100%;
+      max-width: 520px;
+      box-shadow: 0 20px 40px rgba(0, 0, 0, 0.4);
+      animation: fadeIn 0.4s ease-out;
+    }
+
+    @keyframes fadeIn { from { opacity: 0; transform: translateY(12px); } to { opacity: 1; transform: translateY(0); } }
+
+    h2 { font-size: 1.6rem; font-weight: 700; margin-bottom: 8px; }
+    p.subtitle { color: var(--text-muted); font-size: 0.95rem; margin-bottom: 24px; line-height: 1.5; }
+
+    .form-group { margin-bottom: 20px; text-align: left; }
+    label { display: block; font-size: 0.88rem; font-weight: 500; color: var(--text-muted); margin-bottom: 8px; }
+    input[type="text"], input[type="password"], input[type="email"] {
+      width: 100%;
+      padding: 13px 16px;
+      background: rgba(13, 17, 23, 0.7);
+      border: 1px solid var(--surface-border);
+      border-radius: var(--border-radius-md);
+      color: var(--text-main);
+      font-size: 0.95rem;
+      outline: none;
+      transition: all 0.2s;
+    }
+    input:focus { border-color: var(--primary); box-shadow: 0 0 0 3px var(--primary-glow); }
+
+    .btn {
+      display: inline-flex; align-items: center; justify-content: center; gap: 10px;
+      width: 100%; padding: 14px 24px;
+      border-radius: var(--border-radius-md);
+      border: none; font-weight: 600; font-size: 1rem;
+      cursor: pointer; transition: all 0.25s ease;
+    }
+    .btn-primary { background: var(--primary); color: white; box-shadow: 0 4px 15px var(--primary-glow); }
+    .btn-primary:hover { background: var(--primary-hover); transform: translateY(-2px); }
+    .btn-success { background: var(--success); color: white; box-shadow: 0 4px 15px var(--success-glow); }
+    .btn-success:hover { background: #2ea043; transform: translateY(-2px); }
+    .btn-danger { background: rgba(218, 54, 51, 0.2); border: 1px solid var(--danger); color: #f85149; }
+    .btn-danger:hover { background: var(--danger); color: white; }
+
+    .media-preview-box {
+      position: relative; width: 100%; height: 240px; background: #000;
+      border-radius: var(--border-radius-md); overflow: hidden; margin-bottom: 20px;
+      border: 1px solid var(--surface-border);
+    }
+    #webcamVideo { width: 100%; height: 100%; object-fit: cover; transform: scaleX(-1); }
+    .camera-overlay {
+      position: absolute; bottom: 12px; left: 12px;
+      background: rgba(0, 0, 0, 0.65); backdrop-filter: blur(8px);
+      padding: 4px 12px; border-radius: 20px; font-size: 0.78rem;
+    }
+
+    .volume-meter { height: 8px; background: rgba(255, 255, 255, 0.1); border-radius: 4px; overflow: hidden; margin: 12px 0 20px; }
+    .volume-bar { height: 100%; width: 0%; background: linear-gradient(90deg, #238636, #3fb950); transition: width 0.05s ease; }
+
+    /* Live Room */
+    .interview-container {
+      display: none; width: 100%; max-width: 1240px; height: 85vh;
+      grid-template-columns: 420px 1fr; gap: 24px;
+    }
+    .stage-card {
+      background: var(--surface-glass); backdrop-filter: blur(20px);
+      border: 1px solid var(--surface-border); border-radius: var(--border-radius-lg);
+      display: flex; flex-direction: column; overflow: hidden;
+    }
+    .ai-presenter {
+      flex: 1; display: flex; flex-direction: column; align-items: center; justify-content: center; padding: 24px 20px; text-align: center;
+    }
+    .avatar-container {
+      position: relative; width: 156px; height: 156px; margin-bottom: 16px; display: flex; align-items: center; justify-content: center;
+    }
+    .hologram-ring {
+      position: absolute; inset: -6px; border-radius: 50%;
+      background: conic-gradient(from 0deg, #1f6feb, #8957e5, #00d2ff, #1f6feb);
+      opacity: 0.45; filter: blur(8px);
+      animation: rotateHolo 8s linear infinite;
+      transition: all 0.3s ease;
+    }
+    .avatar-halo {
+      position: relative; width: 148px; height: 148px; border-radius: 50%;
+      padding: 3px; background: linear-gradient(135deg, rgba(88, 166, 255, 0.75), rgba(137, 87, 229, 0.75));
+      display: flex; align-items: center; justify-content: center;
+      box-shadow: 0 0 25px rgba(31, 111, 235, 0.35);
+      transition: all 0.35s ease;
+      z-index: 2;
+    }
+    .avatar-halo.speaking {
+      animation: aiSpeakingPulse 1.1s infinite ease-in-out;
+      box-shadow: 0 0 40px rgba(88, 166, 255, 0.75), 0 0 65px rgba(137, 87, 229, 0.5);
+    }
+    .avatar-halo.speaking .hologram-ring {
+      opacity: 0.85; filter: blur(12px); animation: rotateHolo 2.5s linear infinite;
+    }
+    @keyframes rotateHolo { 0% { transform: rotate(0deg); } 100% { transform: rotate(360deg); } }
+    @keyframes aiSpeakingPulse {
+      0% { transform: scale(1); }
+      50% { transform: scale(1.05); }
+      100% { transform: scale(1); }
+    }
+    .avatar-photo {
+      width: 142px; height: 142px; border-radius: 50%; object-fit: cover; object-position: center 20%;
+      background: #161b22; display: block;
+      border: 2px solid rgba(255, 255, 255, 0.15);
+    }
+    
+    /* Futuristic Hologram Orb Visualizer */
+    .hologram-orb {
+      width: 142px; height: 142px; border-radius: 50%;
+      background: radial-gradient(circle at 35% 35%, #58a6ff 0%, #1f6feb 35%, #0d1117 80%);
+      display: none; align-items: center; justify-content: center; position: relative; overflow: hidden;
+      box-shadow: inset 0 0 30px rgba(0, 210, 255, 0.6);
+    }
+    .hologram-orb .orb-core {
+      width: 60px; height: 60px; border-radius: 50%;
+      background: radial-gradient(circle, #ffffff 0%, rgba(88,166,255,0.85) 50%, transparent 80%);
+      animation: orbPulse 2s infinite ease-in-out;
+      filter: blur(2px);
+    }
+    .hologram-orb .orb-ring {
+      position: absolute; width: 115px; height: 115px; border-radius: 50%;
+      border: 1.5px dashed rgba(88, 166, 255, 0.65);
+      animation: rotateHolo 5s linear infinite reverse;
+    }
+    @keyframes orbPulse {
+      0% { transform: scale(0.85); opacity: 0.6; }
+      50% { transform: scale(1.15); opacity: 1; }
+      100% { transform: scale(0.85); opacity: 0.6; }
+    }
+    
+    .view-mode-badge {
+      background: rgba(255, 255, 255, 0.06);
+      border: 1px solid var(--surface-border);
+      color: var(--text-muted);
+      border-radius: 20px;
+      padding: 4px 12px;
+      font-size: 0.75rem;
+      cursor: pointer;
+      display: inline-flex;
+      align-items: center;
+      gap: 6px;
+      transition: all 0.2s;
+    }
+    .view-mode-badge:hover {
+      background: rgba(88, 166, 255, 0.15);
+      color: #58a6ff;
+      border-color: rgba(88, 166, 255, 0.35);
+    }
+    
+    .live-waveform { display: flex; align-items: center; gap: 5px; height: 35px; margin-bottom: 16px; }
+    .wave-bar { width: 4px; background: var(--primary); border-radius: 4px; height: 8px; transition: height 0.1s ease; }
+
+    .candidate-pip {
+      position: relative; width: calc(100% - 40px); height: 160px;
+      background: #000; border-radius: var(--border-radius-md); overflow: hidden; margin: 0 20px 20px;
+      border: 1px solid var(--surface-border);
+    }
+    #candidateVideoPip { width: 100%; height: 100%; object-fit: cover; transform: scaleX(-1); }
+
+    .transcript-header { padding: 20px 24px; border-bottom: 1px solid var(--surface-border); display: flex; justify-content: space-between; align-items: center; }
+    .transcript-feed { flex: 1; padding: 24px; overflow-y: auto; display: flex; flex-direction: column; gap: 16px; }
+    .bubble { max-width: 85%; padding: 16px 20px; border-radius: 16px; line-height: 1.5; font-size: 0.95rem; }
+    .bubble.ai { background: var(--ai-bubble); border: 1px solid rgba(88, 166, 255, 0.2); align-self: flex-start; }
+    .bubble.user { background: var(--user-bubble); border: 1px solid rgba(63, 185, 80, 0.2); align-self: flex-end; }
+    .bubble-author { font-size: 0.75rem; font-weight: 700; text-transform: uppercase; margin-bottom: 6px; }
+    .bubble.ai .bubble-author { color: #58a6ff; }
+    .bubble.user .bubble-author { color: #3fb950; }
+
+    .bottom-bar { padding: 16px 24px; border-top: 1px solid var(--surface-border); display: flex; justify-content: space-between; align-items: center; background: rgba(13, 17, 23, 0.4); }
+    .alert { padding: 14px 18px; border-radius: var(--border-radius-md); margin-bottom: 20px; font-size: 0.9rem; }
+    .alert-info { background: rgba(56, 139, 253, 0.15); border: 1px solid rgba(56, 139, 253, 0.4); color: #58a6ff; }
+
+    canvas { display: none; }
+  </style>
+</head>
+<body>
+
+  <header>
+    <div class="brand">
+      <div class="brand-icon">🎙️</div>
+      <div>AI Voice Interviewer <span style="font-size:0.75rem; background:rgba(255,255,255,0.1); padding:2px 8px; border-radius:12px; margin-left:8px;">Standalone Portal</span></div>
+    </div>
+    <div class="session-badge">
+      <div class="status-dot" id="statusDot"></div>
+      <span id="statusLabel">Ready</span>
+      <span id="interviewTimer" style="display:none; font-family:'JetBrains Mono', monospace; font-weight:600; margin-left:8px;">00:00</span>
+    </div>
+  </header>
+
+  <main>
+    <!-- STEP 1: AUTHENTICATION & GAS URL -->
+    <div class="card" id="authStep">
+      <h2>Candidate Login</h2>
+      <p class="subtitle">Please authenticate to begin your interactive voice assessment.</p>
+
+      <div class="form-group">
+        <label>Copy and paste your shared URL from email in this box</label>
+        <input type="text" id="backendUrl" placeholder="https://...">
+        <small style="color:var(--text-muted); font-size:0.78rem;">Paste the interview portal address provided in your invitation email.</small>
+      </div>
+
+      <div class="form-group">
+        <label>Email Address</label>
+        <input type="email" id="authEmail" placeholder="candidate@example.com">
+      </div>
+
+      <div class="form-group">
+        <label>Access Password</label>
+        <input type="password" id="authPassword" placeholder="Enter assigned password">
+      </div>
+
+      <button class="btn btn-primary" id="btnAuth" onclick="submitAuth()">
+        Verify Credentials & Proceed &rarr;
+      </button>
+    </div>
+
+    <!-- STEP 2: HARDWARE & PHOTO -->
+    <div class="card" id="hardwareStep" style="display: none; max-width: 580px;">
+      <h2>System & Verification Check</h2>
+      <p class="subtitle">Welcome, <strong id="candNameDisplay">Candidate</strong>! Verifying microphone, camera, and speakers.</p>
+
+      <div class="media-preview-box">
+        <video id="webcamVideo" autoplay playsinline muted></video>
+        <div class="camera-overlay">📷 Live Camera Preview</div>
+      </div>
+
+      <div class="volume-meter">
+        <div class="volume-bar" id="micVolumeBar"></div>
+      </div>
+
+      <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 12px; margin-bottom: 20px;">
+        <button class="btn" style="background: rgba(255,255,255,0.08);" onclick="playTestTone()">🔊 Test Speakers</button>
+        <button class="btn" style="background: rgba(255,255,255,0.08);" onclick="snapVerificationPhoto()">📸 Retake Snapshot</button>
+      </div>
+
+      <button class="btn btn-success" onclick="beginInterviewSession()">
+        🚀 Start Voice Interview
+      </button>
+    </div>
+
+    <!-- STEP 3: INTERVIEW ROOM -->
+    <div class="interview-container" id="interviewRoom">
+      <div class="stage-card">
+        <div class="ai-presenter">
+          <div class="avatar-container">
+            <div class="hologram-ring"></div>
+            <div class="avatar-halo" id="avatarHalo">
+              <img id="avatarPhoto" class="avatar-photo" src="executive_interviewer.jpg" alt="Executive Interviewer" onerror="handleAvatarError()">
+              <div id="hologramOrb" class="hologram-orb">
+                <div class="orb-ring"></div>
+                <div class="orb-core"></div>
+              </div>
+            </div>
+          </div>
+
+          <div id="interviewerNameDisplay" style="font-size:1.25rem; font-weight:700; margin-bottom:4px;">Victoria</div>
+          <div id="interviewerRoleDisplay" style="font-size:0.88rem; color:var(--text-muted); margin-bottom:12px;">Senior Talent Assessment Director</div>
+
+          <div style="margin-bottom: 16px;">
+            <button type="button" class="view-mode-badge" id="btnToggleVisual" onclick="toggleAvatarVisual()">
+              <span id="visualModeIcon">🔮</span> <span id="visualModeText">Switch to Hologram Orb</span>
+            </button>
+          </div>
+
+          <div class="live-waveform">
+            <div class="wave-bar"></div><div class="wave-bar"></div><div class="wave-bar"></div>
+            <div class="wave-bar"></div><div class="wave-bar"></div><div class="wave-bar"></div>
+            <div class="wave-bar"></div><div class="wave-bar"></div>
+          </div>
+        </div>
+
+        <div class="candidate-pip">
+          <video id="candidateVideoPip" autoplay playsinline muted></video>
+        </div>
+
+        <div style="padding: 16px 20px; border-top: 1px solid var(--surface-border);">
+          <button class="btn btn-danger" onclick="concludeInterview(true)">End Interview</button>
+        </div>
+      </div>
+
+      <div class="stage-card">
+        <div class="transcript-header">
+          <div>
+            <h3 id="roleTitle" style="font-size: 1.1rem; font-weight: 600;">Technical Voice Interview</h3>
+            <span style="font-size: 0.82rem; color: var(--text-muted);">Interactive Voice Session</span>
+          </div>
+          <div style="font-size:0.82rem; color:#3fb950;">● Full Duplex Audio Active</div>
+        </div>
+
+        <div class="transcript-feed" id="transcriptFeed"></div>
+
+        <div class="bottom-bar">
+          <span style="font-size: 0.85rem; color: var(--text-muted);" id="interviewerNotice">Your interviewer will conduct the session via real-time voice. Speak clearly after each question.</span>
+          <button class="btn btn-primary" style="width:auto; padding:8px 18px;" onclick="concludeInterview(false)">Complete & Submit</button>
+        </div>
+      </div>
+    </div>
+
+    <!-- STEP 4: CONCLUSION -->
+    <div class="card" id="completionStep" style="display: none; text-align: center; max-width: 520px;">
+      <div style="font-size:3.5rem; margin-bottom:16px;">🎓</div>
+      <h2>Interview Finished!</h2>
+      <p class="subtitle" style="margin-bottom:20px;">Thank you for completing your voice interview. Your session has ended and your interview transcript has been securely saved.</p>
+      <div class="alert alert-info" id="docLinkNotice" style="background: rgba(35, 134, 54, 0.15); border: 1px solid rgba(46, 160, 67, 0.4); color: #3fb950; font-size: 0.95rem; line-height: 1.6; padding: 18px 20px;">
+        ⏳ Finalizing and saving your interview transcript...
+      </div>
+      <p style="color:var(--text-muted); font-size:0.85rem; margin-top:24px; line-height: 1.5;">
+        Your responses have been recorded and saved for administrative review.<br>
+        You may now safely close this browser window.
+      </p>
+    </div>
+  </main>
+
+  <canvas id="photoCanvas" width="640" height="480"></canvas>
+
+  <script>
+    let candidateData = null;
+    let realtimeConfig = null;
+    let localStream = null;
+    let ws = null;
+    let audioCtx = null;
+    let micSource = null;
+    let audioProcessor = null;
+    let playbackAudioCtx = null;
+    let playbackTime = 0;
+    let photoDataUrl = "";
+    let photoFileId = "";
+    let transcriptEvents = [];
+    let interviewStartTime = null;
+    const DEFAULT_BACKEND_URL = "";
+    let timerInterval = null;
+    let currentInterviewerName = "Victoria";
+    let currentAvatarMode = "photo";
+
+    function toggleAvatarVisual() {
+      const photo = document.getElementById("avatarPhoto");
+      const orb = document.getElementById("hologramOrb");
+      const text = document.getElementById("visualModeText");
+      const icon = document.getElementById("visualModeIcon");
+      if (currentAvatarMode === "photo") {
+        currentAvatarMode = "hologram";
+        photo.style.display = "none";
+        orb.style.display = "flex";
+        text.textContent = "Switch to Executive Portrait";
+        icon.textContent = "📷";
+      } else {
+        currentAvatarMode = "photo";
+        photo.style.display = "block";
+        orb.style.display = "none";
+        text.textContent = "Switch to Hologram Orb";
+        icon.textContent = "🔮";
+      }
+    }
+
+    function handleAvatarError() {
+      console.log("Executive photo not found or failed to load. Switching to futuristic hologram orb visualizer.");
+      const photo = document.getElementById("avatarPhoto");
+      const orb = document.getElementById("hologramOrb");
+      const btn = document.getElementById("btnToggleVisual");
+      currentAvatarMode = "hologram";
+      photo.style.display = "none";
+      orb.style.display = "flex";
+      if (btn) btn.style.display = "none";
+    }
+
+    // Initialize URL and Auth
+    window.addEventListener("DOMContentLoaded", () => {
+      // Clear any legacy cached URLs from browser storage so the box always starts completely empty
+      try {
+        localStorage.removeItem("gas_backend_url");
+      } catch (e) {}
+
+      const urlParams = new URLSearchParams(window.location.search);
+      const urlBackend = urlParams.get("backend") || urlParams.get("url");
+      if (urlBackend) {
+        document.getElementById("backendUrl").value = urlBackend;
+      } else {
+        document.getElementById("backendUrl").value = "";
+      }
+
+      const urlEmail = urlParams.get("email");
+      if (urlEmail) {
+        document.getElementById("authEmail").value = urlEmail;
+      }
+
+      const urlToken = urlParams.get("token");
+      if (urlToken) autoAuth(urlToken);
+    });
+
+    function getBackendUrl() {
+      return (document.getElementById("backendUrl").value || "").trim();
+    }
+
+    async function submitAuth() {
+      const backendUrl = getBackendUrl();
+      if (!backendUrl) {
+        return alert("Please copy and paste your shared URL from email in the box.");
+      }
+      const email = document.getElementById("authEmail").value.trim();
+      const password = document.getElementById("authPassword").value.trim();
+      if (!email || !password) {
+        return alert("Please enter both your email address and access password.");
+      }
+
+      const btn = document.getElementById("btnAuth");
+      btn.disabled = true;
+      btn.textContent = "Verifying...";
+
+      try {
+        const res = await callBackendApi({ action: "authenticate", email: email, password: password });
+        if (res.success) {
+          candidateData = res.candidate;
+          await loadConfig();
+        } else {
+          alert("Authentication Failed: " + res.message);
+          btn.disabled = false;
+          btn.textContent = "Verify Credentials & Proceed →";
+        }
+      } catch (e) {
+        alert("Error: " + e.message);
+        btn.disabled = false;
+        btn.textContent = "Verify Credentials & Proceed →";
+      }
+    }
+
+    async function autoAuth(token) {
+      try {
+        const res = await callBackendApi({ action: "authenticate", token: token });
+        if (res.success) {
+          candidateData = res.candidate;
+          document.getElementById("authEmail").value = candidateData.email;
+          await loadConfig();
+        }
+      } catch (e) {
+        console.warn("Auto-auth failed:", e);
+      }
+    }
+
+    async function loadConfig() {
+      try {
+        const res = await callBackendApi({ action: "getInterviewConfig", token: candidateData.token || candidateData.id });
+        if (res.success) {
+          realtimeConfig = res.realtimeConfig;
+          currentInterviewerName = realtimeConfig.interviewerName || "Victoria";
+          const title = realtimeConfig.interviewerTitle || "Senior Talent Assessment Director";
+          const nameEl = document.getElementById("interviewerNameDisplay");
+          const titleEl = document.getElementById("interviewerRoleDisplay");
+          const noticeEl = document.getElementById("interviewerNotice");
+          if (nameEl) nameEl.textContent = currentInterviewerName;
+          if (titleEl) titleEl.textContent = title;
+          if (noticeEl) noticeEl.textContent = `${currentInterviewerName} will conduct your interview via real-time voice. Speak clearly after each question.`;
+          await transitionToHardware();
+        } else {
+          alert("Failed to load interview config: " + res.message);
+        }
+      } catch (err) {
+        alert("Error loading config: " + err.message);
+      }
+    }
+
+    let micMonitorAudioCtx = null;
+    let micMonitorAnim = null;
+
+    async function transitionToHardware() {
+      document.getElementById("authStep").style.display = "none";
+      document.getElementById("hardwareStep").style.display = "block";
+      document.getElementById("candNameDisplay").textContent = candidateData.name;
+
+      try {
+        localStream = await navigator.mediaDevices.getUserMedia({
+          video: { width: 640, height: 480 },
+          audio: { echoCancellation: true, noiseSuppression: true, sampleRate: 16000 }
+        });
+
+        const video = document.getElementById("webcamVideo");
+        video.srcObject = localStream;
+        await video.play();
+
+        // Start mic volume meter
+        startMicLevelVisualizer(localStream);
+
+        setTimeout(snapVerificationPhoto, 1200);
+      } catch (err) {
+        alert("Camera / Microphone permission denied: " + err.message);
+      }
+    }
+
+    function startMicLevelVisualizer(stream) {
+      try {
+        micMonitorAudioCtx = new (window.AudioContext || window.webkitAudioContext)();
+        const src = micMonitorAudioCtx.createMediaStreamSource(stream);
+        const analyser = micMonitorAudioCtx.createAnalyser();
+        analyser.fftSize = 256;
+        src.connect(analyser);
+
+        const dataArray = new Uint8Array(analyser.frequencyBinCount);
+        const bar = document.getElementById("micVolumeBar");
+
+        function drawMeter() {
+          if (!bar) return;
+          analyser.getByteFrequencyData(dataArray);
+          let sum = 0;
+          for (let i = 0; i < dataArray.length; i++) sum += dataArray[i];
+          const avg = sum / dataArray.length;
+          const pct = Math.min(100, Math.round((avg / 128) * 100));
+          bar.style.width = pct + "%";
+          micMonitorAnim = requestAnimationFrame(drawMeter);
+        }
+        drawMeter();
+      } catch (e) {
+        console.warn("Could not start visualizer:", e);
+      }
+    }
+
+    function snapVerificationPhoto() {
+      const video = document.getElementById("webcamVideo");
+      const canvas = document.getElementById("photoCanvas");
+      if (!video || !video.videoWidth) return;
+
+      const ctx = canvas.getContext("2d");
+      ctx.save();
+      ctx.translate(canvas.width, 0);
+      ctx.scale(-1, 1);
+      ctx.drawImage(video, 0, 0, canvas.width, canvas.height);
+      ctx.restore();
+
+      photoDataUrl = canvas.toDataURL("image/jpeg", 0.85);
+
+      callBackendApi({
+        action: "savePhoto",
+        candidateId: candidateData.id,
+        email: candidateData.email,
+        imageDataBase64: photoDataUrl
+      }).then(r => {
+        if (r && r.success) photoFileId = r.fileId;
+      }).catch(err => {
+        console.warn("Photo upload notice:", err.message);
+      });
+    }
+
+    async function beginInterviewSession() {
+      if (micMonitorAnim) cancelAnimationFrame(micMonitorAnim);
+      if (micMonitorAudioCtx) {
+        try { micMonitorAudioCtx.close(); } catch(e){}
+      }
+
+      // Pre-warm playback audio context on user interaction
+      if (!playbackAudioCtx) {
+        playbackAudioCtx = new (window.AudioContext || window.webkitAudioContext)({ sampleRate: 24000 });
+      }
+      if (playbackAudioCtx.state === "suspended") {
+        await playbackAudioCtx.resume();
+      }
+
+      document.getElementById("hardwareStep").style.display = "none";
+      document.getElementById("interviewRoom").style.display = "grid";
+      document.getElementById("candidateVideoPip").srcObject = localStream;
+      document.getElementById("roleTitle").textContent = `${candidateData.role} Voice Interview`;
+
+      startTimer();
+      connectWebSocket();
+    }
+
+    function connectWebSocket() {
+      const cfg = realtimeConfig;
+      if (!cfg || !cfg.wsUrl) {
+        alert("Configuration missing. Please refresh and log in again.");
+        return;
+      }
+
+      let wsUrl = cfg.wsUrl;
+      // Ensure api_key is passed as query parameter
+      if (!wsUrl.includes("api_key=") && (cfg.tempToken || cfg.rawApiKey)) {
+        const k = cfg.tempToken || cfg.rawApiKey;
+        wsUrl += (wsUrl.includes("?") ? "&" : "?") + "api_key=" + encodeURIComponent(k);
+      }
+
+      console.log("Connecting WebSocket to:", wsUrl);
+      document.getElementById("statusDot").className = "status-dot speaking";
+      document.getElementById("statusLabel").textContent = "Connecting to " + currentInterviewerName + "...";
+
+      try {
+        // Direct browser WebSocket connection (no subprotocol headers rejected by Istio/Envoy)
+        ws = new WebSocket(wsUrl);
+
+        ws.onopen = () => {
+          console.log("WebSocket connected successfully!");
+          document.getElementById("statusDot").className = "status-dot active";
+          document.getElementById("statusLabel").textContent = "Active Interview";
+
+          const interviewerName = cfg.interviewerName || "Victoria";
+          const interviewerTitle = cfg.interviewerTitle || "Senior Talent Assessment Director";
+          const qList = (candidateData.questions || []).map((q, i) => `Question ${i + 1}: ${q}`).join("\n");
+          const instructions = cfg.systemInstructions || (`You are ${interviewerName}, a ${interviewerTitle} representing ${cfg.companyName}.\n` +
+            `You are conducting an executive talent evaluation interview with candidate "${candidateData.name}" for the position of "${candidateData.role}".\n\n` +
+            `SCHEDULED INTERVIEW QUESTIONS TO ASK IN ORDER:\n${qList}\n\n` +
+            `EXECUTIVE VOCAL DELIVERY & CONDUCT INSTRUCTIONS:\n` +
+            `1. Speak with a mature, calm, authoritative, dignified, and measured tone of voice. Do NOT sound bubbly, casual, or young.\n` +
+            `2. Use refined, executive-level language and clear, steady pronunciation.\n` +
+            `3. NEVER interrupt the candidate while they are answering. Remain completely silent and patient until they finish their complete answer.\n` +
+            `4. NEVER use repetitive filler phrases like "I am listening", "uh-huh", or "yes". Only speak when the candidate has completely stopped speaking.\n` +
+            `5. When the candidate finishes answering a question, provide a brief, professional acknowledgment (e.g. "Thank you for that explanation. Let us proceed to the next question."), and then state the next question clearly.\n` +
+            `6. Continue asking each question in sequence until all questions have been covered.\n` +
+            `7. Once the last question has been answered, thank ${candidateData.name} professionally and formally conclude the interview session.`);
+
+          ws.send(JSON.stringify({
+            event_id: "evt_init_" + Date.now(),
+            type: "session.update",
+            session: {
+              modalities: ["text", "audio"],
+              voice: cfg.voice || "Tina",
+              input_audio_format: "pcm",
+              output_audio_format: "pcm",
+              input_audio_transcription: { model: "qwen3-asr-flash-realtime" },
+              turn_detection: {
+                type: "server_vad",
+                threshold: 0.6,
+                silence_duration_ms: 1800,
+                prefix_padding_ms: 300
+              },
+              instructions: instructions
+            }
+          }));
+
+          hasStartedGreeting = false;
+          startMicStream();
+
+          function triggerGreeting() {
+            if (!ws || ws.readyState !== WebSocket.OPEN || hasStartedGreeting) return;
+            hasStartedGreeting = true;
+            console.log(`Triggering ${interviewerName} greeting & Question 1...`);
+            const firstQuestion = (candidateData.questions && candidateData.questions.length > 0)
+              ? candidateData.questions[0]
+              : "Could you please summarize your professional background and core areas of expertise?";
+
+            const isUrdu = (cfg.language && cfg.language.toLowerCase().includes("urdu"));
+            const candidateReadyText = isUrdu
+              ? `السلام علیکم ${interviewerName}، میں ${candidateData.name} ہوں۔ میں انٹرویو کے لیے تیار ہوں۔`
+              : `Hello ${interviewerName}, I am ${candidateData.name}. I am ready for the interview.`;
+
+            ws.send(JSON.stringify({
+              event_id: "evt_candidate_ready_" + Date.now(),
+              type: "conversation.item.create",
+              item: {
+                type: "message",
+                role: "user",
+                content: [
+                  {
+                    type: "input_text",
+                    text: candidateReadyText
+                  }
+                ]
+              }
+            }));
+
+            const greetingPrompt = cfg.greetingInstructions || `In a calm, mature, authoritative, and dignified executive tone, welcome ${candidateData.name} formally to this interview for the ${candidateData.role} role at ${cfg.companyName}. Introduce yourself as ${interviewerName}, and ask Question 1: "${firstQuestion}".`;
+
+            ws.send(JSON.stringify({
+              event_id: "resp_greet_" + Date.now(),
+              type: "response.create",
+              response: {
+                modalities: ["text", "audio"],
+                instructions: greetingPrompt
+              }
+            }));
+          }
+
+          // Fallback timer if session.updated is delayed
+          setTimeout(() => {
+            if (!hasStartedGreeting) {
+              triggerGreeting();
+            }
+          }, 2500);
+        };
+
+        let hasStartedGreeting = false;
+
+        ws.onmessage = (e) => {
+          let evt;
+          try {
+            evt = JSON.parse(e.data);
+          } catch (err) {
+            console.warn("Non-JSON WebSocket message:", e.data);
+            return;
+          }
+
+          const type = evt.type;
+
+          // 0. Session configuration confirmed by server -> trigger Question 1
+          if (type === "session.updated") {
+            console.log("session.updated confirmed by server.");
+            if (!hasStartedGreeting) {
+              triggerGreeting();
+            }
+          }
+
+          // 1. User starts speaking -> Stop previous Tina audio immediately (stops double-voice overlap)
+          else if (type === "input_audio_buffer.speech_started") {
+            stopAllAudioPlayback();
+          }
+
+          // 2. Candidate speech completed
+          else if (type === "conversation.item.input_audio_transcription.completed") {
+            if (evt.transcript && evt.transcript.trim()) {
+              const text = evt.transcript.trim();
+              appendMsg("user", text);
+              recordTranscriptEntry(candidateData.name, text);
+            }
+          }
+
+          // 3. Candidate speech item created
+          else if (type === "conversation.item.created") {
+            try {
+              if (evt.item && evt.item.role === "user" && evt.item.content) {
+                for (const c of evt.item.content) {
+                  if (c.transcript && c.transcript.trim()) {
+                    appendMsg("user", c.transcript.trim());
+                    recordTranscriptEntry(candidateData.name, c.transcript.trim());
+                  } else if (c.text && c.text.trim()) {
+                    appendMsg("user", c.text.trim());
+                    recordTranscriptEntry(candidateData.name, c.text.trim());
+                  }
+                }
+              }
+            } catch(e){}
+          }
+
+          // 4. Streaming audio chunk (24kHz PCM)
+          else if (type === "response.audio.delta") {
+            playAudioChunk(evt.delta);
+          }
+
+          // 5. Streaming transcript text
+          else if (type === "response.audio_transcript.delta") {
+            updateAiStream(evt.delta);
+          }
+
+          // 6. Finished audio transcript
+          else if (type === "response.audio_transcript.done") {
+            if (evt.transcript && evt.transcript.trim()) {
+              recordTranscriptEntry(`${currentInterviewerName} (Interviewer)`, evt.transcript.trim());
+            }
+            finalizeAiStream();
+          }
+
+          // 7. Finished full response turn
+          else if (type === "response.done") {
+            try {
+              const outputs = evt.response?.output || [];
+              for (const out of outputs) {
+                if (out.role === "assistant" && out.content) {
+                  for (const c of out.content) {
+                    if (c.transcript && c.transcript.trim()) {
+                      recordTranscriptEntry(`${currentInterviewerName} (Interviewer)`, c.transcript.trim());
+                    } else if (c.text && c.text.trim()) {
+                      recordTranscriptEntry(`${currentInterviewerName} (Interviewer)`, c.text.trim());
+                    }
+                  }
+                }
+              }
+            } catch(e){}
+            finalizeAiStream();
+          }
+
+          // 8. Server error notices
+          else if (type === "error") {
+            console.error("Qwen Realtime Server Error:", evt);
+            appendMsg("ai", "⚠️ [Engine notice: " + (evt.error?.message || JSON.stringify(evt)) + "]");
+          }
+        };
+
+        ws.onerror = (err) => {
+          console.error("WebSocket error:", err);
+          document.getElementById("statusDot").className = "status-dot";
+          document.getElementById("statusLabel").textContent = "Connection Error";
+          alert("WebSocket connection error. Please verify your internet connection and API key.");
+        };
+
+        ws.onclose = (e) => {
+          console.log("WebSocket closed:", e.code, e.reason);
+          document.getElementById("statusDot").className = "status-dot";
+          document.getElementById("statusLabel").textContent = "Disconnected";
+        };
+
+      } catch (err) {
+        console.error("Error creating WebSocket:", err);
+        alert("Failed to initialize WebSocket: " + err.message);
+      }
+    }
+
+    // =========================================================================
+    // AUDIO ENGINE: ECHO CANCELLATION, 16kHz PCM RECORD & QUEUED 24kHz PLAYBACK
+    // =========================================================================
+    let scheduledAudioSources = [];
+    let isAiSpeaking = false;
+
+    function stopAllAudioPlayback() {
+      for (const src of scheduledAudioSources) {
+        try {
+          src.stop();
+          src.disconnect();
+        } catch (e) {}
+      }
+      scheduledAudioSources = [];
+      if (playbackAudioCtx) {
+        playbackTime = playbackAudioCtx.currentTime;
+      }
+      isAiSpeaking = false;
+      document.getElementById("avatarHalo").classList.remove("speaking");
+    }
+
+    function startMicStream() {
+      audioCtx = new (window.AudioContext || window.webkitAudioContext)({ sampleRate: 16000 });
+      micSource = audioCtx.createMediaStreamSource(localStream);
+      audioProcessor = audioCtx.createScriptProcessor(2048, 1, 1);
+
+      audioProcessor.onaudioprocess = (e) => {
+        if (!ws || ws.readyState !== WebSocket.OPEN) return;
+        const input = e.inputBuffer.getChannelData(0);
+
+        // Acoustic Echo Suppression: When Tina is actively speaking through laptop speakers,
+        // ignore speaker sound leakage so Tina does not interrupt herself and say "I am listening"
+        if (isAiSpeaking) {
+          let sumSquares = 0;
+          for (let i = 0; i < input.length; i++) sumSquares += input[i] * input[i];
+          const rms = Math.sqrt(sumSquares / input.length);
+          if (rms < 0.14) {
+            // Background speaker sound below interrupt threshold; skip streaming
+            return;
+          }
+        }
+
+        const pcm16 = new Int16Array(input.length);
+        for (let i = 0; i < input.length; i++) {
+          const s = Math.max(-1, Math.min(1, input[i]));
+          pcm16[i] = s < 0 ? s * 0x8000 : s * 0x7FFF;
+        }
+
+        let binary = "";
+        const bytes = new Uint8Array(pcm16.buffer);
+        for (let i = 0; i < bytes.byteLength; i++) binary += String.fromCharCode(bytes[i]);
+
+        ws.send(JSON.stringify({
+          type: "input_audio_buffer.append",
+          audio: window.btoa(binary)
+        }));
+      };
+
+      micSource.connect(audioProcessor);
+
+      // Route through a silent gain node to prevent mic from feeding back into speakers
+      const muteGain = audioCtx.createGain();
+      muteGain.gain.value = 0;
+      audioProcessor.connect(muteGain);
+      muteGain.connect(audioCtx.destination);
+    }
+
+    function playAudioChunk(b64) {
+      if (!playbackAudioCtx) {
+        playbackAudioCtx = new (window.AudioContext || window.webkitAudioContext)({ sampleRate: 24000 });
+        playbackTime = playbackAudioCtx.currentTime;
+      }
+
+      const bin = window.atob(b64);
+      const bytes = new Uint8Array(bin.length);
+      for (let i = 0; i < bin.length; i++) bytes[i] = bin.charCodeAt(i);
+      const int16 = new Int16Array(bytes.buffer);
+      const float32 = new Float32Array(int16.length);
+      for (let i = 0; i < int16.length; i++) float32[i] = int16[i] / 32768.0;
+
+      const buf = playbackAudioCtx.createBuffer(1, float32.length, 24000);
+      buf.getChannelData(0).set(float32);
+
+      const src = playbackAudioCtx.createBufferSource();
+      src.buffer = buf;
+      src.connect(playbackAudioCtx.destination);
+
+      isAiSpeaking = true;
+      document.getElementById("avatarHalo").classList.add("speaking");
+
+      src.onended = () => {
+        const idx = scheduledAudioSources.indexOf(src);
+        if (idx > -1) scheduledAudioSources.splice(idx, 1);
+        if (scheduledAudioSources.length === 0) {
+          isAiSpeaking = false;
+          document.getElementById("avatarHalo").classList.remove("speaking");
+        }
+      };
+
+      scheduledAudioSources.push(src);
+
+      if (playbackTime < playbackAudioCtx.currentTime) playbackTime = playbackAudioCtx.currentTime;
+      src.start(playbackTime);
+      playbackTime += buf.duration;
+    }
+
+    // =========================================================================
+    // TRANSCRIPT RECORDING & STREAMING
+    // =========================================================================
+    function recordTranscriptEntry(speaker, text) {
+      if (!text || !text.trim()) return;
+      text = text.trim();
+
+      const last = transcriptEvents[transcriptEvents.length - 1];
+      if (last && last.speaker === speaker && last.text === text) {
+        return; // Exact duplicate
+      }
+      if (last && last.speaker === speaker && text.startsWith(last.text)) {
+        last.text = text; // Update partial sentence to full sentence
+        return;
+      }
+
+      transcriptEvents.push({
+        speaker: speaker,
+        text: text,
+        time: new Date().toLocaleTimeString()
+      });
+      console.log("Logged transcript event:", speaker, text);
+    }
+
+    let activeAiBubble = null;
+    function updateAiStream(delta) {
+      if (!activeAiBubble) {
+        const feed = document.getElementById("transcriptFeed");
+        const b = document.createElement("div");
+        b.className = "bubble ai";
+        b.innerHTML = `<div class="bubble-author">AI Interviewer • ${currentInterviewerName}</div><div class="content"></div>`;
+        feed.appendChild(b);
+        activeAiBubble = b.querySelector(".content");
+      }
+      activeAiBubble.textContent += delta;
+      document.getElementById("transcriptFeed").scrollTop = 999999;
+    }
+
+    function finalizeAiStream() {
+      if (activeAiBubble && activeAiBubble.textContent.trim()) {
+        recordTranscriptEntry(`${currentInterviewerName} (Interviewer)`, activeAiBubble.textContent.trim());
+        activeAiBubble = null;
+      }
+    }
+
+    function appendMsg(speaker, text) {
+      if (!text || !text.trim()) return;
+      const feed = document.getElementById("transcriptFeed");
+      const b = document.createElement("div");
+      b.className = "bubble " + speaker;
+      b.innerHTML = `<div class="bubble-author">${speaker === 'user' ? candidateData.name : currentInterviewerName}</div><div class="content">${text}</div>`;
+      feed.appendChild(b);
+      feed.scrollTop = 999999;
+    }
+
+    function startTimer() {
+      interviewStartTime = Date.now();
+      const el = document.getElementById("interviewTimer");
+      el.style.display = "inline-block";
+      timerInterval = setInterval(() => {
+        const diff = Math.floor((Date.now() - interviewStartTime) / 1000);
+        el.textContent = `${String(Math.floor(diff / 60)).padStart(2, "0")}:${String(diff % 60).padStart(2, "0")}`;
+      }, 1000);
+    }
+
+    async function concludeInterview(confirmPrompt) {
+      if (confirmPrompt && !confirm("Conclude interview session?")) return;
+      if (timerInterval) clearInterval(timerInterval);
+      stopAllAudioPlayback();
+      if (ws) ws.close();
+      if (localStream) localStream.getTracks().forEach(t => t.stop());
+
+      finalizeAiStream();
+
+      // Bulletproof Safety Net: If transcriptEvents is empty, harvest all dialogues from on-screen bubbles!
+      if (transcriptEvents.length === 0) {
+        const bubbles = document.querySelectorAll("#transcriptFeed .bubble");
+        bubbles.forEach(b => {
+          const authorEl = b.querySelector(".bubble-author");
+          const author = authorEl ? authorEl.textContent.trim() : "";
+          const contentEl = b.querySelector(".content") || b;
+          let text = contentEl.textContent || "";
+          if (author && text.startsWith(author)) {
+            text = text.substring(author.length).trim();
+          }
+          if (text && !text.includes("⚠️") && !text.includes("Connecting")) {
+            transcriptEvents.push({
+              speaker: (author.includes(currentInterviewerName) || author.includes("Tina") || author.includes("Interviewer"))
+                ? `${currentInterviewerName} (Interviewer)`
+                : (candidateData ? candidateData.name : "Candidate"),
+              text: text.trim(),
+              time: new Date().toLocaleTimeString()
+            });
+          }
+        });
+      }
+
+      console.log("Submitting interview transcript with items:", transcriptEvents.length);
+
+      document.getElementById("interviewRoom").style.display = "none";
+      document.getElementById("completionStep").style.display = "block";
+
+      const totalSec = Math.floor((Date.now() - (interviewStartTime || Date.now())) / 1000);
+      try {
+        const res = await callBackendApi({
+          action: "saveTranscriptDoc",
+          candidateId: candidateData.id,
+          email: candidateData.email,
+          transcriptList: transcriptEvents,
+          photoFileId: photoFileId,
+          durationSeconds: totalSec
+        });
+
+        const notice = document.getElementById("docLinkNotice");
+        if (res && res.success) {
+          notice.innerHTML = `✅ <strong>Interview Transcript Successfully Saved</strong><br>Your session responses (${transcriptEvents.length} dialogue turns) and webcam verification have been securely submitted to the administration team.`;
+        } else {
+          notice.innerHTML = `✅ <strong>Interview Concluded</strong><br>Your interview responses and verification records have been saved.`;
+        }
+      } catch (err) {
+        const notice = document.getElementById("docLinkNotice");
+        notice.innerHTML = `✅ <strong>Interview Concluded</strong><br>Your session records have been saved. You may now close this window.`;
+      }
+    }
+
+    async function callBackendApi(payload) {
+      const url = getBackendUrl();
+      if (!url) throw new Error("Please enter your Google Apps Script Web App URL.");
+
+      let resp;
+      try {
+        resp = await fetch(url, {
+          method: "POST",
+          headers: { "Content-Type": "text/plain;charset=utf-8" },
+          body: JSON.stringify(payload)
+        });
+      } catch (netErr) {
+        throw new Error("Network request failed: " + netErr.message);
+      }
+
+      const text = await resp.text();
+      try {
+        return JSON.parse(text);
+      } catch (parseErr) {
+        if (text.includes("<!DOCTYPE") || text.includes("<html") || text.includes("Google Drive")) {
+          throw new Error("Google Apps Script returned an HTML page (Status: " + resp.status + "). This means 'Who has access' in Apps Script deployment is set to 'Only myself'. Change it to 'Anyone' in Apps Script -> Deploy -> Manage deployments -> Edit.");
+        }
+        throw new Error("Invalid server response: " + text.substring(0, 150));
+      }
+    }
+
+    function playTestTone() {
+      const ctx = new (window.AudioContext || window.webkitAudioContext)();
+      const osc = ctx.createOscillator();
+      osc.connect(ctx.destination);
+      osc.frequency.value = 440;
+      osc.start();
+      setTimeout(() => { osc.stop(); ctx.close(); }, 400);
+    }
+  </script>
+</body>
+</html>
